@@ -1,0 +1,37 @@
+{
+  "background_color": "#020206",
+  "display": "standalone",
+  "icons": [
+    {
+      "sizes": "144x144",
+      "src": "index.144x144.png",
+      "type": "image/png"
+    },
+    {
+      "sizes": "180x180",
+      "src": "index.180x180.png",
+      "type": "image/png"
+    },
+    {
+      "sizes": "512x512",
+      "src": "index.512x512.png",
+      "type": "image/png"
+    },
+    {
+      "sizes": "192x192",
+      "src": "index.192x192.png",
+      "type": "image/png"
+    }
+  ],
+  "name": "Neon Survivor",
+  "orientation": "any",
+  "start_url": "./index.html",
+  "short_name": "Neon Survivor",
+  "theme_color": "#0d0f1e",
+  "scope": "./",
+  "id": "/neon/",
+  "lang": "en",
+  "categories": [
+    "games"
+  ]
+}
