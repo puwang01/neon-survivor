@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Neon Survivor · 音频诊断</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:18px; background:#05060e; color:#cfe9ff;
+         font:15px/1.65 system-ui,-apple-system,"PingFang SC",sans-serif; }
+  h1 { font-size:20px; margin:0 0 6px; color:#6fe3ff; }
+  .sub { color:#6f8aa8; font-size:13px; margin-bottom:16px; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:7px 0;
+         border-bottom:1px solid rgba(90,160,255,.14); font-size:14px; }
+  .k { color:#7f9bb8; }
+  .v { color:#d8f2ff; font-weight:600; text-align:right; word-break:break-all; }
+  .ok { color:#43e08a; } .bad { color:#ff6b81; } .warn { color:#ffc247; }
+  button { width:100%; padding:15px; margin:9px 0; border-radius:10px; font-size:16px;
+           border:1px solid rgba(90,220,255,.45); background:rgba(20,40,70,.75);
+           color:#9fe8ff; }
+  button:active { background:rgba(40,80,130,.9); }
+  #log { margin-top:14px; font-size:13px; color:#8fb3cf; white-space:pre-wrap; }
+  .meter { height:9px; background:rgba(255,255,255,.08); border-radius:5px; overflow:hidden; margin-top:6px; }
+  .meter i { display:block; height:100%; width:0; background:linear-gradient(90deg,#39d0ff,#67ffb0); transition:width .06s; }
+  .card { background:rgba(12,20,36,.72); border:1px solid rgba(90,160,255,.18);
+          border-radius:12px; padding:14px; margin:12px 0; }
+</style>
+</head>
+<body>
+<h1>音频诊断</h1>
+<div class="sub">用手机浏览器打开；先把媒体音量调到最大、关掉静音开关。</div>
+
+<div class="card" id="env"></div>
+
+<div class="card">
+  <div style="margin-bottom:8px;color:#7f9bb8">电平表（播放时应跳动）</div>
+  <div class="meter"><i id="bar"></i></div>
+</div>
+
+<button id="b1">① 播放振荡器音（WebAudio 基础）</button>
+<button id="b2">② 播放解码后的音频缓冲（Godot 用的方式）</button>
+<button id="b3">③ 播放 &lt;audio&gt; 元素（非 WebAudio 路径）</button>
+
+<div id="log">点上面的按钮，告诉我：<b>哪几个能听到</b>。</div>
+
+<script>
+const env = document.getElementById('env');
+const log = document.getElementById('log');
+const bar = document.getElementById('bar');
+
+function row(k, v, cls) {
+  return `<div class="row"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`;
+}
+function addLog(s) { log.innerHTML += '<br>' + s; }
+
+(function showEnv() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const ctxCtor = window.AudioContext || window.webkitAudioContext;
+  let out = '';
+  out += row('平台', isIOS ? 'iOS' : 'Android / 其他');
+  out += row('安全上下文 HTTPS', window.isSecureContext ? '是' : '否', window.isSecureContext ? 'ok' : 'bad');
+  out += row('AudioContext 构造器', ctxCtor ? '存在' : '不存在', ctxCtor ? 'ok' : 'bad');
+  out += row('AudioWorklet 支持', (ctxCtor && window.AudioWorkletNode) ? '支持' : '不支持',
+             window.AudioWorkletNode ? 'ok' : 'warn');
+  out += row('navigator.audioSession', ('audioSession' in navigator) ? '可用' : '不可用');
+  out += row('用户代理', ua.slice(0, 68));
+  env.innerHTML = out;
+})();
+
+let ctx = null, analyser = null;
+function ensureCtx() {
+  if (ctx) return ctx;
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) { addLog('❌ 浏览器没有 AudioContext'); return null; }
+  ctx = new C();
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.connect(ctx.destination);
+  const buf = new Uint8Array(analyser.fftSize);
+  (function tick() {
+    if (!analyser) return;
+    analyser.getByteTimeDomainData(buf);
+    let peak = 0;
+    for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128) / 128);
+    bar.style.width = Math.min(100, peak * 180) + '%';
+    requestAnimationFrame(tick);
+  })();
+  return ctx;
+}
+
+async function resumeCtx() {
+  const c = ensureCtx();
+  if (!c) return null;
+  if (c.state !== 'running') {
+    try { await c.resume(); } catch (e) { addLog('resume 失败: ' + e.message); }
+  }
+  addLog('AudioContext.state = <b>' + c.state + '</b>, sampleRate=' + c.sampleRate);
+  return c;
+}
+
+// ① 振荡器
+document.getElementById('b1').onclick = async () => {
+  const c = await resumeCtx(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = 'sine'; o.frequency.value = 880;
+  g.gain.value = 0.25;
+  o.connect(g); g.connect(analyser);
+  o.start(); o.stop(c.currentTime + 1.2);
+  addLog('▶ 已发送 880Hz 正弦波 1.2 秒');
+};
+
+// ② 解码后的 AudioBuffer（Godot 走的路径：AudioWorklet + AudioBuffer）
+document.getElementById('b2').onclick = async () => {
+  const c = await resumeCtx(); if (!c) return;
+  const sr = c.sampleRate, dur = 1.2;
+  const buf = c.createBuffer(1, Math.floor(sr * dur), sr);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / sr;
+    d[i] = Math.sin(2 * Math.PI * 660 * t) * 0.25 * Math.min(1, (dur - t) * 4);
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf; src.connect(analyser); src.start();
+  addLog('▶ 已发送 660Hz AudioBuffer 1.2 秒');
+};
+
+// ③ <audio> 元素（data URI WAV）
+document.getElementById('b3').onclick = () => {
+  const sr = 22050, dur = 1.0, n = sr * dur;
+  const bytes = new Uint8Array(44 + n * 2);
+  const dv = new DataView(bytes.buffer);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) bytes[o + i] = s.charCodeAt(i); };
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); ws(8, 'WAVEfmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true);
+  dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    dv.setInt16(44 + i * 2, Math.sin(2 * Math.PI * 520 * i / sr) * 0.3 * 32767, true);
+  }
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const a = new Audio('data:audio/wav;base64,' + btoa(bin));
+  a.volume = 1.0;
+  a.play().then(() => addLog('▶ 已播放 <audio> 元素（520Hz）'))
+         .catch(e => addLog('❌ <audio> 播放被拒绝: ' + e.message));
+};
+</script>
+</body>
+</html>

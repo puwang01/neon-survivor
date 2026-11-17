@@ -94,7 +94,117 @@ body {
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 <link rel="manifest" href="index.manifest.json">
 
-	</head>
+	<script>
+// 只做两件"无副作用"的事：
+//   1) iOS：声明为 playback 会话，静音拨片不再静音游戏
+//   2) 微信内置浏览器：通过 WeixinJSBridge 解锁音频
+// 注意：绝对不要去包装 AudioContext 或改写 AudioNode.prototype.connect，
+// 会干扰引擎的音频图初始化，导致页面崩溃（已踩过一次）。
+(function () {
+  var isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+
+  // 逃生舱：?swreset=1 清掉所有 Service Worker 与缓存后回到首页
+  if (location.search.indexOf('swreset') >= 0) {
+    try {
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        rs.forEach(function (r) { r.unregister(); });
+      });
+      caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+      setTimeout(function () { location.replace(location.pathname); }, 900);
+    } catch (e) {}
+  }
+
+  function lockPortrait() {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('portrait').catch(function () {});
+      }
+    } catch (e) {}
+  }
+  lockPortrait();
+  ['pointerdown', 'touchstart'].forEach(function (t) {
+    document.addEventListener(t, lockPortrait, { passive: true, capture: true });
+  });
+
+  function mediaSession() {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  }
+  mediaSession();
+  ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(function (t) {
+    document.addEventListener(t, mediaSession, { passive: true, capture: true });
+  });
+
+  function wxUnlock() {
+    if (typeof WeixinJSBridge === 'undefined') return;
+    WeixinJSBridge.invoke('getNetworkType', {}, function () { mediaSession(); });
+  }
+  if (isWeChat) {
+    document.addEventListener('WeixinJSBridgeReady', wxUnlock, false);
+    wxUnlock();
+    setTimeout(wxUnlock, 800);
+    window.addEventListener('load', function () {
+      var bar = document.createElement('div');
+      bar.textContent = '微信内声音受限，点右上角 ⋯ → 在浏览器打开可获得完整音效';
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;' +
+        'background:rgba(8,12,24,.92);color:#7fe3ff;font:13px/1.5 system-ui,sans-serif;' +
+        'padding:10px 14px;text-align:center;border-top:1px solid rgba(90,220,255,.35)';
+      bar.onclick = function () { bar.remove(); };
+      document.body.appendChild(bar);
+    });
+  }
+})();
+</script><script>
+// 原生 <audio> 音频通道（仅在 URL 带 ?nativeaudio=1 时启用）。
+// 不预加载任何文件：第一次播放时才创建元素并设 src，避免拖慢手机启动。
+(function () {
+  if (location.search.indexOf('nativeaudio=0') >= 0) return;   // 默认启用，可用 ?nativeaudio=0 关闭
+
+  var NAMES = ['shoot','hit','explode','pickup','hurt','levelup','dash','gameover','shield','boss_warn'];
+  var VOICES = 2;
+  var pool = {}, cursor = {}, music = null;
+
+  window.__neonSfxCount = 0;
+  window.__neonMusicStarted = false;
+
+  function voiceOf(name, i) {
+    var arr = pool[name];
+    if (!arr[i]) {
+      var a = new Audio();
+      a.preload = 'none';
+      a.src = 'sfx/' + name + '.wav';
+      arr[i] = a;
+    }
+    return arr[i];
+  }
+
+  window.neonSfx = function (name, gain, rate) {
+    if (NAMES.indexOf(name) < 0) return;
+    window.__neonSfxCount++;
+    if (!pool[name]) { pool[name] = []; cursor[name] = 0; }
+    var i = cursor[name] = (cursor[name] + 1) % VOICES;
+    var el = voiceOf(name, i);
+    try {
+      el.volume = Math.max(0, Math.min(1, gain));
+      el.playbackRate = Math.max(0.4, Math.min(3.5, rate || 1));
+      el.currentTime = 0;
+      var p = el.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  };
+
+  window.neonMusic = function (on) {
+    try {
+      if (!music) { music = new Audio('sfx/music.wav'); music.loop = true; music.preload = 'none'; music.volume = 0.4; window.__neonMusic = music; }
+      if (on) { window.__neonMusicStarted = true; var p = music.play(); if (p && p.catch) p.catch(function () {}); }
+      else { music.pause(); }
+    } catch (e) {}
+  };
+
+  window.neonMusicVolume = function (v) {
+    try { if (music) music.volume = Math.max(0, Math.min(1, v)); } catch (e) {}
+  };
+})();
+</script></head>
 	<body>
 		<canvas id="canvas">
 			Your browser does not support the canvas tag.
@@ -112,7 +222,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":483724,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":823356,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

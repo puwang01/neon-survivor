@@ -24,7 +24,7 @@
     }
   ],
   "name": "Neon Survivor",
-  "orientation": "any",
+  "orientation": "portrait",
   "start_url": "./index.html",
   "short_name": "Neon Survivor",
   "theme_color": "#0d0f1e",

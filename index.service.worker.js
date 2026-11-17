@@ -4,17 +4,17 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1794652826|2667070';
+const CACHE_VERSION = 'v20|1794881578|2746923';
 /** @type {string} */
 const CACHE_PREFIX = 'Neon Survivor-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 /** @type {string} */
 const OFFLINE_URL = 'index.offline.html';
 /** @type {boolean} */
-const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = true;
+const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = false;
 // Files that will be cached on load.
 /** @type {string[]} */
-const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js","index.wasm","index.pck"];
+const CACHED_FILES = ["/","index.js","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js","index.wasm","index.pck"];
 // Files that we might not want the user to preload, and will only be cached on first load.
 /** @type {string[]} */
 const CACHEABLE_FILES = [];
