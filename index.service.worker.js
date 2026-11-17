@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = 'v20|1794882094|2747020';
+const CACHE_VERSION = 'v20|1794882457|2724468';
 /** @type {string} */
 const CACHE_PREFIX = 'Neon Survivor-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
